@@ -7,12 +7,12 @@ class Patterns(object):
     @staticmethod
     def create_name_patterns(taxonomy):
         return EntitiesFirst(
-            EntityConfig(u'no me llamo {NP}', 'name', None, True, taxonomy),
-            EntityConfig(u'mi nombre no es {NP}', 'name', None, True, taxonomy),
-            EntityConfig(u'no soy {NP}', 'name', None, True, taxonomy),
-            EntityConfig(u'me llamo {NP}', 'name', None, False, taxonomy),
-            EntityConfig(u'mi nombre es {NP}', 'name', None, False, taxonomy),
-            EntityConfig(u'soy {NP}', 'name', None, False, taxonomy),
+            EntityConfig(u'no me llamo {(NN|NNP)+}', 'name', None, True, taxonomy),
+            EntityConfig(u'mi nombre no es {(NN|NNP)+}', 'name', None, True, taxonomy),
+            EntityConfig(u'no soy {(NN|NNP)+}', 'name', None, True, taxonomy),
+            EntityConfig(u'me llamo {(NN|NNP)+}', 'name', None, False, taxonomy),
+            EntityConfig(u'mi nombre es {(NN|NNP)+}', 'name', None, False, taxonomy),
+            EntityConfig(u'soy {(NN|NNP)+}', 'name', None, False, taxonomy),
             EntityConfig(u'{(NN|NNP)+}', 'name', None, False, taxonomy, exclude=['email', 'phone', 'sorry']),
         )
     
