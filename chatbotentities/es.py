@@ -1,4 +1,5 @@
-from pattern.search import Classifier, Taxonomy
+# -*- coding: utf-8 -*-
+import re
 from .extractor import EntityConfig, EntitiesFirst, EntitiesAll
 
 
@@ -6,35 +7,35 @@ class Patterns(object):
     @staticmethod
     def create_name_patterns(taxonomy):
         return EntitiesFirst(
-            EntityConfig(u'no me llamo {NP}', 'name', None, True, TAXONOMY),
-            EntityConfig(u'mi nombre no es {NP}', 'name', None, True, TAXONOMY),
-            EntityConfig(u'no soy {NP}', 'name', None, True, TAXONOMY),
-            EntityConfig(u'me llamo {NP}', 'name', None, False, TAXONOMY),
-            EntityConfig(u'mi nombre es {NP}', 'name', None, False, TAXONOMY),
-            EntityConfig(u'soy {NP}', 'name', None, False, TAXONOMY),
-            EntityConfig(u'{(NN|NNP)+}', 'name', None, False, TAXONOMY, exclude=['email', 'phone', 'sorry']),
+            EntityConfig(u'no me llamo {NP}', 'name', None, True, taxonomy),
+            EntityConfig(u'mi nombre no es {NP}', 'name', None, True, taxonomy),
+            EntityConfig(u'no soy {NP}', 'name', None, True, taxonomy),
+            EntityConfig(u'me llamo {NP}', 'name', None, False, taxonomy),
+            EntityConfig(u'mi nombre es {NP}', 'name', None, False, taxonomy),
+            EntityConfig(u'soy {NP}', 'name', None, False, taxonomy),
+            EntityConfig(u'{(NN|NNP)+}', 'name', None, False, taxonomy, exclude=['email', 'phone', 'sorry']),
         )
     
     @staticmethod
     def create_email_patterns(taxonomy):
         return EntitiesFirst(
-            EntityConfig(u'correo no es {EMAIL}', 'email', None, True, TAXONOMY),
-            EntityConfig(u'correo ELECTRONIC no es {EMAIL}', 'email', None, True, TAXONOMY),
-            EntityConfig(u'correo ELECTRONIC? es? {EMAIL}', 'email', None, False, TAXONOMY),
-            EntityConfig(u'WRITE a {EMAIL}', 'email', None, False, TAXONOMY),
-            EntityConfig(u'{EMAIL}', 'email', None, False, TAXONOMY, strict=True),
+            EntityConfig(u'correo no es {EMAIL}', 'email', None, True, taxonomy),
+            EntityConfig(u'correo ELECTRONIC no es {EMAIL}', 'email', None, True, taxonomy),
+            EntityConfig(u'correo ELECTRONIC? es? {EMAIL}', 'email', None, False, taxonomy),
+            EntityConfig(u'WRITE a {EMAIL}', 'email', None, False, taxonomy),
+            EntityConfig(u'{EMAIL}', 'email', None, False, taxonomy, strict=True),
         )
     
     @staticmethod
     def create_phone_patterns(taxonomy):
         return EntitiesFirst(
-            EntityConfig(u'mi PHONEWORD no es {PHONE}', 'phone', None, True, TAXONOMY),
-            EntityConfig(u'mi NUMBERWORD no es {PHONE}', 'phone', None, True, TAXONOMY),
-            EntityConfig(u'mi NUMBERWORD de PHONEWORD no es {PHONE}', 'phone', None, True, TAXONOMY),
-            EntityConfig(u'mi PHONEWORD es? {PHONE}', 'phone', None, False, TAXONOMY),
-            EntityConfig(u'mi NUMBERWORD es? {PHONE}', 'phone', None, False, TAXONOMY),
-            EntityConfig(u'mi NUMBERWORD de? PHONEWORD es? {PHONE}', 'phone', None, False, TAXONOMY),
-            EntityConfig(u'{PHONE}', 'phone', None, False, TAXONOMY, strict=True),
+            EntityConfig(u'mi PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
+            EntityConfig(u'mi NUMBERWORD no es {PHONE}', 'phone', None, True, taxonomy),
+            EntityConfig(u'mi NUMBERWORD de PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
+            EntityConfig(u'mi PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
+            EntityConfig(u'mi NUMBERWORD es? {PHONE}', 'phone', None, False, taxonomy),
+            EntityConfig(u'mi NUMBERWORD de? PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
+            EntityConfig(u'{PHONE}', 'phone', None, False, taxonomy, strict=True),
         )
 
     @classmethod
@@ -42,7 +43,7 @@ class Patterns(object):
         name_patterns = cls.create_name_patterns(taxonomy)
         email_patterns = cls.create_email_patterns(taxonomy)
         phone_patterns = cls.create_phone_patterns(taxonomy)
-        return EntitiesAll(name_patterns, email_patterns, phone_patterns)
+        return EntitiesAll(email_patterns, phone_patterns, name_patterns)
 
 
 class EmailParent(object):
@@ -99,7 +100,7 @@ class PhoneParent(object):
 
 class ContactParent(EmailParent, PhoneParent):
     def __call__(self, term):
-        result = super(ContactParents, self).__call__(term)
+        result = super(ContactParent, self).__call__(term)
         if result:
             return result
         if term in [u'numero', u'número']:
@@ -110,5 +111,5 @@ class ContactParent(EmailParent, PhoneParent):
             return ['electronic']
         if term in [u'escribir', u'escribeme', u'escribime', u'escribirme', u'contactame', u'contáctame', u'contactar', u'contactarme']:
             return ['write']
-        if term in [u'disculpa', u'disculpame', u'espera']:
+        if term in [u'disculpa', u'disculpame', u'discúlpame', u'espera']:
             return ['sorry']
