@@ -29,12 +29,12 @@ class Patterns(object):
     @staticmethod
     def create_phone_patterns(taxonomy):
         return EntitiesFirst(
-            EntityConfig(u'mi PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
-            EntityConfig(u'mi NUMBERWORD no es {PHONE}', 'phone', None, True, taxonomy),
-            EntityConfig(u'mi NUMBERWORD de PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
-            EntityConfig(u'mi PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
-            EntityConfig(u'mi NUMBERWORD es? {PHONE}', 'phone', None, False, taxonomy),
-            EntityConfig(u'mi NUMBERWORD de? PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
+            EntityConfig(u'PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
+            EntityConfig(u'NUMBERWORD no es {PHONE}', 'phone', None, True, taxonomy),
+            EntityConfig(u'NUMBERWORD de PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
+            EntityConfig(u'PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
+            EntityConfig(u'NUMBERWORD es? {PHONE}', 'phone', None, False, taxonomy),
+            EntityConfig(u'NUMBERWORD de? PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
             EntityConfig(u'{PHONE}', 'phone', None, False, taxonomy, strict=True),
         )
 
@@ -46,7 +46,12 @@ class Patterns(object):
         return EntitiesAll(email_patterns, phone_patterns, name_patterns)
 
 
-class EmailParent(object):
+class BaseParent(object):
+    def __call__(self, term):
+        pass
+
+
+class EmailParent(BaseParent):
     EMAIL_BODY_REGEX = re.compile('''
         ^(?!\.)                            # name may not begin with a dot
         (
@@ -83,19 +88,25 @@ class EmailParent(object):
             return None
 
     def __call__(self, term):
+        result = super(EmailParent, self).__call__(term)
+        if result:
+            return result
         if self.is_email(term):
             return ['email']
 
 
-class PhoneParent(object):
+class PhoneParent(BaseParent):
     PHONE_NUMBER_REGEX = re.compile(r'(\d{2}[\d\-\(\)\s]{3,}\d{2})', re.VERBOSE | re.IGNORECASE)
     
     def is_phone(self, text):
         return self.PHONE_NUMBER_REGEX.match(text) is not None
 
     def __call__(self, term):
+        result = super(PhoneParent, self).__call__(term)
+        if result:
+            return result
         if self.is_phone(term):
-            return ['email']
+            return ['phone']
 
 
 class ContactParent(EmailParent, PhoneParent):
