@@ -1,126 +1,168 @@
 # -*- coding: utf-8 -*-
 import re
-from .extractor import EntityConfig, EntitiesFirst, EntitiesAll
+from .extractor import EntityConfig, EntityNegation, EntitiesFirst, EntitiesAll
+
+from pattern.search import Classifier, Taxonomy
 
 
-class Patterns(object):
-    @staticmethod
-    def create_name_patterns(taxonomy):
-        return EntitiesFirst(
-            EntityConfig(u'no me llamo {(NN|NNP)+}', 'name', None, True, taxonomy),
-            EntityConfig(u'mi nombre no es {(NN|NNP)+}', 'name', None, True, taxonomy),
-            EntityConfig(u'no soy {(NN|NNP)+}', 'name', None, True, taxonomy),
-            EntityConfig(u'me llamo {(NN|NNP)+}', 'name', None, False, taxonomy),
-            EntityConfig(u'mi nombre es {(NN|NNP)+}', 'name', None, False, taxonomy),
-            EntityConfig(u'soy {(NN|NNP)+}', 'name', None, False, taxonomy),
-            EntityConfig(u'{(NN|NNP)+}', 'name', None, False, taxonomy, exclude=['email', 'phone', 'sorry']),
-        )
-    
-    @staticmethod
-    def create_email_patterns(taxonomy):
-        return EntitiesFirst(
-            EntityConfig(u'correo no es {EMAIL}', 'email', None, True, taxonomy),
-            EntityConfig(u'correo ELECTRONIC no es {EMAIL}', 'email', None, True, taxonomy),
-            EntityConfig(u'correo ELECTRONIC? es? {EMAIL}', 'email', None, False, taxonomy),
-            EntityConfig(u'WRITE a {EMAIL}', 'email', None, False, taxonomy),
-            EntityConfig(u'{EMAIL}', 'email', None, False, taxonomy, strict=True),
-        )
-    
-    @staticmethod
-    def create_phone_patterns(taxonomy):
-        return EntitiesFirst(
-            EntityConfig(u'PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
-            EntityConfig(u'NUMBERWORD no es {PHONE}', 'phone', None, True, taxonomy),
-            EntityConfig(u'NUMBERWORD de PHONEWORD no es {PHONE}', 'phone', None, True, taxonomy),
-            EntityConfig(u'PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
-            EntityConfig(u'NUMBERWORD es? {PHONE}', 'phone', None, False, taxonomy),
-            EntityConfig(u'NUMBERWORD de? PHONEWORD es? {PHONE}', 'phone', None, False, taxonomy),
-            EntityConfig(u'{PHONE}', 'phone', None, False, taxonomy, strict=True),
-        )
+class BasePatterns(object):
+    @classmethod
+    def taxonomy(cls):
+        result = Taxonomy()
+        result.classifiers.append(Classifier(cls.parent))
+        return result
+
+
+class EmailPatterns(BasePatterns):
+    @classmethod
+    def parent(cls, term):
+        from .validators import is_email
+        if is_email(term):
+            return ['email']
+        if term in [u'electrónico', u'electronico']:
+            return ['electronico']
+        if term in [u'escribir', u'escribeme', u'escribime', u'escribirme', u'contactame', u'contáctame', u'contactar', u'contactarme']:
+            return ['escribir']
 
     @classmethod
-    def create_contact_patterns(cls, taxonomy):
-        name_patterns = cls.create_name_patterns(taxonomy)
-        email_patterns = cls.create_email_patterns(taxonomy)
-        phone_patterns = cls.create_phone_patterns(taxonomy)
-        return EntitiesAll(email_patterns, phone_patterns, name_patterns)
+    def patterns(cls):
+        from .extractor import EntityFirst, EntityPattern
+        taxonomy = cls.taxonomy()
+        def negation(expression):
+            return EntityPattern('email', expression, negation=True, taxonomy=taxonomy)
+        def extractor(expression, negation, strict=False):
+            return EntityPattern('email', expression, variables={'value': 1}, 
+                       negation=negation, taxonomy=taxonomy, strict=strict)
+        return EntityFirst(
+            negation(u'mal el|mi correo ELECTRONICO?'),
+            negation(u'correo ELECTRONICO? es|esta|está mal|incorrecto'),
+            negation(u'correo ELECTRONICO? no es|esta|está bien|correcto'),
+            negation(u'no es mi|el correo ELECTRONICO?'),
+            extractor(u'correo ELECTRONICO? no es {EMAIL}', negation=True),
+            extractor(u'correo ELECTRONICO? es? {EMAIL}', negation=False),
+            extractor(u'ESCRIBIR a {EMAIL}', negation=False),
+            extractor(u'{EMAIL}', negation=False)
+        )
 
 
-class BaseParent(object):
-    def __call__(self, term):
-        pass
-
-
-class EmailParent(BaseParent):
-    EMAIL_BODY_REGEX = re.compile('''
-        ^(?!\.)                            # name may not begin with a dot
-        (
-          [-a-z0-9!\#$%&'*+/=?^_`{|}~]     # all legal characters except dot
-          |
-          (?<!\.)\.                        # single dots only
-        )+
-        (?<!\.)$                            # name may not end with a dot
-    ''', re.VERBOSE | re.IGNORECASE)
-    EMAIL_DOMAIN_REGEX = re.compile('''
-        (
-          localhost
-          |
-          (
-            [a-z0-9]
-                # [sub]domain begins with alphanumeric
-            (
-              [-\w]*                         # alphanumeric, underscore, dot, hyphen
-              [a-z0-9]                       # ending alphanumeric
-            )?
-          \.                               # ending dot
-          )+
-          [a-z]{2,}                        # TLD alpha-only
-       )$
-    ''', re.VERBOSE | re.IGNORECASE)
-    
-    def is_email(self, text):
-        try:
-            body, domain = text.rsplit('@', 1)
-            match_body = self.EMAIL_BODY_REGEX.match(body)
-            match_domain = self.EMAIL_DOMAIN_REGEX.match(domain)
-            return match_body is not None and match_domain is not None
-        except ValueError:
-            return None
-
-    def __call__(self, term):
-        result = super(EmailParent, self).__call__(term)
-        if result:
-            return result
-        if self.is_email(term):
-            return ['email']
-
-
-class PhoneParent(BaseParent):
-    PHONE_NUMBER_REGEX = re.compile(r'(\d{2}[\d\-\(\)\s]{3,}\d{2})', re.VERBOSE | re.IGNORECASE)
-    
-    def is_phone(self, text):
-        return self.PHONE_NUMBER_REGEX.match(text) is not None
-
-    def __call__(self, term):
-        result = super(PhoneParent, self).__call__(term)
-        if result:
-            return result
-        if self.is_phone(term):
+class PhonePatterns(BasePatterns):
+    @classmethod
+    def parent(cls, term):
+        from .validators import is_phone
+        if is_phone(term):
             return ['phone']
-
-
-class ContactParent(EmailParent, PhoneParent):
-    def __call__(self, term):
-        result = super(ContactParent, self).__call__(term)
-        if result:
-            return result
         if term in [u'numero', u'número']:
-            return ['numberword']
-        if term in [u'teléfono', u'telefono', u'celular', u'mobil', u'móbil', u'mobile', u'telefonico', u'telefónico']:
-            return ['phoneword']
-        if term in [u'electrónico', u'electronico']:
-            return ['electronic']
-        if term in [u'escribir', u'escribeme', u'escribime', u'escribirme', u'contactame', u'contáctame', u'contactar', u'contactarme']:
-            return ['write']
+            return ['numero']
+        if term in [u'teléfono', u'telefono', u'celular', u'mobil', u'móbil', u'mobile', u'telefonico', u'telefónico', 'cel']:
+            return ['telefono']
+        
+    @classmethod
+    def patterns(cls):
+        from .extractor import EntityFirst, EntityPattern
+        taxonomy = cls.taxonomy()
+        def negation(expression):
+            return EntityPattern('phone', expression, negation=True, taxonomy=taxonomy)
+        def extractor(expression, negation, strict=False):
+            return EntityPattern('phone', expression, variables={'value': 1}, 
+                       negation=negation, taxonomy=taxonomy, strict=strict)
+        return EntityFirst(
+            negation(u'mal el|en TELEFONO|NUMERO'),
+            negation(u'mal el NUMERO de? TELEFONO'),
+            negation(u'TELEFONO|NUMERO esta|está mal'),
+            negation(u'NUMERO de? TELEFONO esta|está mal'),
+            negation(u'no es mi TELEFONO|NUMERO'),
+            negation(u'no es mi NUMERO de? TELEFONO'),
+            extractor(u'NUMERO|TELEFONO no es {PHONE}', negation=True),
+            extractor(u'NUMERO de TELEFONO no es {PHONE}', negation=True),
+            extractor(u'TELEFONO|NUMERO es? {PHONE}', negation=False),
+            extractor(u'NUMERO de? TELEFONO es? {PHONE}', negation=False),
+            extractor(u'{PHONE}', negation=False, strict=True),
+        )
+
+
+class NamePatterns(BasePatterns):
+    @classmethod
+    def parent(cls, term):
         if term in [u'disculpa', u'disculpame', u'discúlpame', u'espera']:
             return ['sorry']
+        if term in ['nombre']:
+            return ['name']
+
+    @classmethod
+    def patterns(cls):
+        from .extractor import EntityFirst, EntityPattern
+        taxonomy = cls.taxonomy()
+        def negation(expression):
+            return EntityPattern('name', expression, negation=True, taxonomy=taxonomy)
+        def extractor(expression, negation, strict=False, exclude=None):
+            return EntityPattern('name', expression, variables={'value': 1},
+                       negation=negation, taxonomy=taxonomy, strict=strict, exclude=exclude)
+        return EntityFirst(
+            negation(u'mal el nombre'),
+            negation(u'nombre esta|está mal'),
+            negation(u'no es mi nombre'),
+            
+            extractor(u'equivoque|equivoqué con|escribiendo|poniendo el nombre', negation=True),
+            extractor(u'no me llamo {(NN|NNP)+}', negation=True),
+            extractor(u'mi nombre no es {(NN|NNP)+}', negation=True),
+            extractor(u'no soy {(NN|NNP)+}', negation=True),
+            
+            extractor(u'me llamo {(NN|NNP)+}', negation=False),
+            extractor(u'mi nombre es {(NN|NNP)+}', negation=False),
+            extractor(u'soy {(NN|NNP)+}', negation=False),
+        )
+
+
+class CompanyPatterns(BasePatterns):
+    @classmethod
+    def parent(cls, term):
+        if term in [u'disculpa', u'disculpame', u'discúlpame', u'espera']:
+            return ['sorry']
+        if term in ['nombre']:
+            return ['name']
+        if term in ['empresa', 'compañia', 'compania', 'compañía', 'companía']:
+            return ['company']
+   
+    @classmethod
+    def patterns(cls):
+        from .extractor import EntityFirst, EntityPattern
+        taxonomy = cls.taxonomy()
+        def negation(expression):
+            return EntityPattern('company', expression, negation=True, taxonomy=taxonomy)
+        def extractor(expression, negation, strict=False, exclude=None):
+            return EntityPattern('company', expression, variables={'value': 1},
+                       negation=negation, taxonomy=taxonomy, strict=strict, exclude=exclude)
+        return EntityFirst(
+            negation(u'mal (el nombre de)? la COMPANY'),
+            negation(u'(nombre de)? la COMPANY esta|está mal'),
+            negation(u'no es (el nombre de)? la COMPANY'),
+            extractor(u'equivoque|equivoqué con|escribiendo|poniendo (el nombre de)? la COMPANY', negation=True),
+            extractor(u'la COMPANY no se llama {(NN|NNP)+}', negation=True),
+            extractor(u'el nombre de la COMPANY no es {(NN|NNP)+}', negation=True),
+            extractor(u'la COMPANY no es {(NN|NNP)+}', negation=True),
+            extractor(u'COMPANY se llama {(NN|NNP)+}', negation=False),
+            extractor(u'nombre de la COMPANY es {(NN|NNP)+}', negation=False),
+            extractor(u'COMPANY es {(NN|NNP)+}', negation=False),
+        )
+
+
+class DefaultNamePatterns(NamePatterns):
+    @classmethod
+    def patterns(cls):
+        from .extractor import EntityPattern
+        taxonomy = cls.taxonomy()
+        return EntityPattern(None, u'{(NN|NNP)+}', variables={'value': 1}, negation=False,
+                   taxonomy=taxonomy, strict=False, exclude=['email', 'phone', 'sorry', 'name'])
+
+
+class ContactPatterns(BasePatterns):
+    @classmethod
+    def patterns(cls):
+        from .extractor import EntityConcat
+        email = EmailPatterns.patterns()
+        phone = PhonePatterns.patterns()
+        name = NamePatterns.patterns()
+        company = CompanyPatterns.patterns()
+        default_name = DefaultNamePatterns.patterns()
+        return (email + phone + company + name) * default_name
+
